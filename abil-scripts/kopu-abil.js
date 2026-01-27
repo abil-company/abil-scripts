@@ -1,17 +1,23 @@
 /**
  * Script de Captura de Orçamentos - Kopu Brindes
  * Desenvolvido por: Abil Company
- * Versão: 1.0
+ * Versão: 1.1 - COM DEBUG
  */
 
 (function() {
     'use strict';
     
+    console.log('🔵 Abil: Script iniciado');
+    
     const ABIL_WEBHOOK_URL = 'https://webhook.abilcrm.com/webhook/kopu-orcamento';
+    
+    console.log('🔵 Abil: Webhook configurado:', ABIL_WEBHOOK_URL);
     
     function capturarProdutos() {
         const produtos = [];
         const containers = document.querySelectorAll('.bg-white.rounded-lg');
+        
+        console.log('🔍 Abil: Containers encontrados:', containers.length);
         
         containers.forEach(function(container) {
             const nomeElement = container.querySelector('h2, h3, p[class*="font-bold"]');
@@ -34,11 +40,14 @@
             }
         });
         
+        console.log('📦 Abil: Produtos capturados:', produtos.length);
+        console.log('📦 Abil: Dados dos produtos:', produtos);
+        
         return produtos;
     }
     
     function capturarDadosCliente() {
-        return {
+        const dados = {
             tipo_pessoa: (document.querySelector('[name="type"]:checked') || {}).value || '',
             nome_fantasia: (document.querySelector('[placeholder="Nome completo"]') || {}).value || '',
             cnpj_cpf: (document.querySelector('[placeholder="12.345.789/0001-10"]') || {}).value || '',
@@ -46,13 +55,26 @@
             telefone: (document.querySelector('[placeholder="(11) 99090-9090"]') || {}).value || '',
             email: (document.querySelector('[placeholder="email@email.com"]') || {}).value || ''
         };
+        
+        console.log('👤 Abil: Dados do cliente capturados:', dados);
+        
+        return dados;
     }
     
     function processarOrcamento() {
+        console.log('🚀 Abil: Processando orçamento...');
+        
         const dadosCliente = capturarDadosCliente();
         const produtos = capturarProdutos();
         
-        if ((!dadosCliente.email && !dadosCliente.telefone) || produtos.length === 0) {
+        // Validações
+        if (!dadosCliente.email && !dadosCliente.telefone) {
+            console.warn('⚠️ Abil: Email ou telefone obrigatório!');
+            return;
+        }
+        
+        if (produtos.length === 0) {
+            console.warn('⚠️ Abil: Nenhum produto no carrinho!');
             return;
         }
         
@@ -77,28 +99,52 @@
             fonte: 'Website Kopu - Carrinho'
         };
         
+        console.log('📤 Abil: Enviando payload:', payload);
+        
         fetch(ABIL_WEBHOOK_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         })
         .then(function(response) {
+            console.log('📡 Abil: Resposta recebida - Status:', response.status);
             if (response.ok) {
-                console.log('✅ Orçamento enviado para Abil');
+                console.log('✅ Abil: Orçamento enviado para Abil com sucesso!');
+                return response.json();
+            } else {
+                console.error('❌ Abil: Erro na resposta do webhook');
+                throw new Error('Webhook retornou erro: ' + response.status);
             }
         })
-        .catch(function() {});
+        .then(function(data) {
+            console.log('✅ Abil: Confirmação do webhook:', data);
+        })
+        .catch(function(erro) {
+            console.error('❌ Abil: Erro ao enviar orçamento:', erro);
+        });
     }
     
     function monitorarFormulario() {
+        console.log('👀 Abil: Aguardando 2 segundos para monitorar formulário...');
+        
         setTimeout(function() {
             const botaoFinalizar = Array.from(document.querySelectorAll('button')).find(function(btn) {
                 return btn.textContent.trim() === 'Finalizar orçamento';
             });
             
             if (botaoFinalizar) {
+                console.log('✅ Abil: Botão "Finalizar orçamento" encontrado!');
+                console.log('✅ Abil: Listener adicionado ao botão');
+                
                 botaoFinalizar.addEventListener('click', function() {
+                    console.log('🎯 Abil: Botão clicado! Aguardando 500ms...');
                     setTimeout(processarOrcamento, 500);
+                });
+            } else {
+                console.error('❌ Abil: Botão "Finalizar orçamento" NÃO encontrado!');
+                console.log('🔍 Abil: Botões disponíveis na página:');
+                document.querySelectorAll('button').forEach(function(btn, index) {
+                    console.log('  ' + (index+1) + ':', btn.textContent.trim());
                 });
             }
         }, 2000);
@@ -109,5 +155,7 @@
     } else {
         monitorarFormulario();
     }
+    
+    console.log('✅ Abil: Captura ativada');
     
 })();
