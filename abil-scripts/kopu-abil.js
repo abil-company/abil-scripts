@@ -1,7 +1,7 @@
 /**
  * Script de Captura de Orçamentos - Kopu Brindes
  * Desenvolvido por: Abil Company
- * Versão: 1.1 - COM DEBUG
+ * Versão: 1.2 - COM RETRY
  */
 
 (function() {
@@ -124,32 +124,67 @@
         });
     }
     
-    function monitorarFormulario() {
-        console.log('👀 Abil: Aguardando 2 segundos para monitorar formulário...');
+    // Variável para controlar se já foi configurado
+    var jáConfigurado = false;
+    
+    function tentarConfigurarBotao() {
+        // Se já configurou, não tenta de novo
+        if (jáConfigurado) {
+            return;
+        }
         
-        setTimeout(function() {
-            const botaoFinalizar = Array.from(document.querySelectorAll('button')).find(function(btn) {
-                return btn.textContent.trim() === 'Finalizar orçamento';
+        const botaoFinalizar = Array.from(document.querySelectorAll('button')).find(function(btn) {
+            return btn.textContent.trim() === 'Finalizar orçamento';
+        });
+        
+        if (botaoFinalizar) {
+            console.log('✅ Abil: Botão "Finalizar orçamento" encontrado!');
+            console.log('✅ Abil: Listener adicionado ao botão');
+            
+            botaoFinalizar.addEventListener('click', function() {
+                console.log('🎯 Abil: Botão clicado! Aguardando 500ms...');
+                setTimeout(processarOrcamento, 500);
             });
             
-            if (botaoFinalizar) {
-                console.log('✅ Abil: Botão "Finalizar orçamento" encontrado!');
-                console.log('✅ Abil: Listener adicionado ao botão');
-                
-                botaoFinalizar.addEventListener('click', function() {
-                    console.log('🎯 Abil: Botão clicado! Aguardando 500ms...');
-                    setTimeout(processarOrcamento, 500);
-                });
-            } else {
-                console.error('❌ Abil: Botão "Finalizar orçamento" NÃO encontrado!');
+            jáConfigurado = true;
+            return true;
+        } else {
+            console.log('⏳ Abil: Botão ainda não encontrado, tentando novamente...');
+            return false;
+        }
+    }
+    
+    function monitorarFormulario() {
+        console.log('👀 Abil: Iniciando monitoramento do formulário...');
+        
+        // Tenta configurar imediatamente
+        if (tentarConfigurarBotao()) {
+            return; // Já encontrou, não precisa continuar
+        }
+        
+        // Se não encontrou, fica tentando a cada 500ms por até 20 segundos
+        var tentativas = 0;
+        var maxTentativas = 40; // 40 x 500ms = 20 segundos
+        
+        var intervalo = setInterval(function() {
+            tentativas++;
+            
+            if (tentarConfigurarBotao()) {
+                // Encontrou o botão!
+                clearInterval(intervalo);
+            } else if (tentativas >= maxTentativas) {
+                // Desiste depois de 20 segundos
+                console.error('❌ Abil: Botão "Finalizar orçamento" NÃO encontrado após ' + (maxTentativas * 0.5) + ' segundos');
                 console.log('🔍 Abil: Botões disponíveis na página:');
                 document.querySelectorAll('button').forEach(function(btn, index) {
                     console.log('  ' + (index+1) + ':', btn.textContent.trim());
                 });
+                clearInterval(intervalo);
             }
-        }, 2000);
+        }, 500);
     }
     
+    // Aguarda a página carregar completamente
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', monitorarFormulario);
     } else {
@@ -159,3 +194,41 @@
     console.log('✅ Abil: Captura ativada');
     
 })();
+```
+
+---
+
+## 🚀 O QUE MUDOU:
+
+1. **Retry automático:** Tenta encontrar o botão a cada 500ms
+2. **Timeout longo:** Fica tentando por até 20 segundos
+3. **Para quando encontra:** Não desperdiça recursos depois de configurar
+4. **Logs detalhados:** Mostra cada tentativa no console
+
+---
+
+## 📋 ATUALIZAR NO GITHUB:
+
+1. https://github.com/thiagosrib/abil-scripts
+2. Edita o `kopu-abil.js`
+3. **Substitui TODO o código** pelo de cima
+4. Commit: `v1.2 - Add retry logic`
+
+---
+
+## 🧪 TESTAR:
+
+Depois do deploy:
+
+1. **Fecha todas as abas** do Kopu
+2. **Abre ABA NORMAL** (não anônima)
+3. https://kopu.com.br/carrinho
+4. **Console (F12)**
+
+Vai aparecer:
+```
+🔵 Abil: Script iniciado
+👀 Abil: Iniciando monitoramento...
+⏳ Abil: Botão ainda não encontrado, tentando novamente...
+⏳ Abil: Botão ainda não encontrado, tentando novamente...
+✅ Abil: Botão "Finalizar orçamento" encontrado!
