@@ -1,13 +1,13 @@
 /**
  * Script de Captura de Orçamentos - Kopu Brindes
  * Desenvolvido por: Abil Company
- * Versão: 1.2 - COM RETRY
+ * Versão: 1.3 - SPA COMPATIBLE
  */
 
 (function() {
     'use strict';
     
-    console.log('🔵 Abil: Script iniciado');
+    console.log('🔵 Abil: Script iniciado (v1.3 SPA)');
     
     const ABIL_WEBHOOK_URL = 'https://webhook.abilcrm.com/webhook/kopu-orcamento';
     
@@ -41,7 +41,6 @@
         });
         
         console.log('📦 Abil: Produtos capturados:', produtos.length);
-        console.log('📦 Abil: Dados dos produtos:', produtos);
         
         return produtos;
     }
@@ -67,7 +66,6 @@
         const dadosCliente = capturarDadosCliente();
         const produtos = capturarProdutos();
         
-        // Validações
         if (!dadosCliente.email && !dadosCliente.telefone) {
             console.warn('⚠️ Abil: Email ou telefone obrigatório!');
             return;
@@ -124,73 +122,121 @@
         });
     }
     
-    // Variável para controlar se já foi configurado
-    var jáConfigurado = false;
+    var botoesConfigurados = new Set();
     
     function tentarConfigurarBotao() {
-        // Se já configurou, não tenta de novo
-        if (jáConfigurado) {
-            return;
-        }
+        // Procura o botão com texto "Finalizar orçamento"
+        var botoes = document.querySelectorAll('button');
+        var botaoEncontrado = false;
         
-        const botaoFinalizar = Array.from(document.querySelectorAll('button')).find(function(btn) {
-            return btn.textContent.trim() === 'Finalizar orçamento';
+        botoes.forEach(function(botao) {
+            var texto = botao.textContent.trim();
+            
+            // Se o botão tem o texto correto e ainda não foi configurado
+            if (texto === 'Finalizar orçamento' && !botoesConfigurados.has(botao)) {
+                console.log('✅ Abil: Botão "Finalizar orçamento" encontrado!');
+                console.log('✅ Abil: Listener adicionado ao botão');
+                
+                botao.addEventListener('click', function() {
+                    console.log('🎯 Abil: Botão clicado! Aguardando 500ms...');
+                    setTimeout(processarOrcamento, 500);
+                });
+                
+                botoesConfigurados.add(botao);
+                botaoEncontrado = true;
+            }
         });
         
-        if (botaoFinalizar) {
-            console.log('✅ Abil: Botão "Finalizar orçamento" encontrado!');
-            console.log('✅ Abil: Listener adicionado ao botão');
-            
-            botaoFinalizar.addEventListener('click', function() {
-                console.log('🎯 Abil: Botão clicado! Aguardando 500ms...');
-                setTimeout(processarOrcamento, 500);
-            });
-            
-            jáConfigurado = true;
-            return true;
-        } else {
-            console.log('⏳ Abil: Botão ainda não encontrado, tentando novamente...');
-            return false;
-        }
+        return botaoEncontrado;
     }
     
     function monitorarFormulario() {
-        console.log('👀 Abil: Iniciando monitoramento do formulário...');
+        console.log('👀 Abil: Iniciando monitoramento (URL: ' + window.location.pathname + ')');
+        
+        // Verifica se está na página do carrinho
+        if (!window.location.pathname.includes('carrinho')) {
+            console.log('ℹ️ Abil: Não está na página do carrinho, aguardando...');
+            return;
+        }
+        
+        console.log('✅ Abil: Está na página do carrinho, procurando botão...');
         
         // Tenta configurar imediatamente
         if (tentarConfigurarBotao()) {
-            return; // Já encontrou, não precisa continuar
+            return;
         }
         
-        // Se não encontrou, fica tentando a cada 500ms por até 20 segundos
+        // Se não encontrou, fica tentando
         var tentativas = 0;
-        var maxTentativas = 40; // 40 x 500ms = 20 segundos
+        var maxTentativas = 60; // 60 x 500ms = 30 segundos
         
         var intervalo = setInterval(function() {
             tentativas++;
             
+            // Verifica se ainda está na página do carrinho
+            if (!window.location.pathname.includes('carrinho')) {
+                console.log('ℹ️ Abil: Saiu da página do carrinho, parando busca');
+                clearInterval(intervalo);
+                return;
+            }
+            
             if (tentarConfigurarBotao()) {
-                // Encontrou o botão!
                 clearInterval(intervalo);
             } else if (tentativas >= maxTentativas) {
-                // Desiste depois de 20 segundos
-                console.error('❌ Abil: Botão "Finalizar orçamento" NÃO encontrado após ' + (maxTentativas * 0.5) + ' segundos');
-                console.log('🔍 Abil: Botões disponíveis na página:');
-                document.querySelectorAll('button').forEach(function(btn, index) {
-                    console.log('  ' + (index+1) + ':', btn.textContent.trim());
-                });
+                console.error('❌ Abil: Botão não encontrado após ' + (maxTentativas * 0.5) + ' segundos');
                 clearInterval(intervalo);
+            }
+            
+            // Log a cada 10 tentativas
+            if (tentativas % 10 === 0) {
+                console.log('⏳ Abil: Ainda procurando... (' + tentativas + ' tentativas)');
             }
         }, 500);
     }
     
-    // Aguarda a página carregar completamente
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', monitorarFormulario);
-    } else {
-        monitorarFormulario();
+    // Monitorar mudanças de URL (para SPAs)
+    var ultimaUrl = window.location.href;
+    
+    function verificarMudancaUrl() {
+        var urlAtual = window.location.href;
+        
+        if (urlAtual !== ultimaUrl) {
+            console.log('🔄 Abil: Mudança de URL detectada:', urlAtual);
+            ultimaUrl = urlAtual;
+            
+            // Aguarda um pouco para a página renderizar
+            setTimeout(monitorarFormulario, 1000);
+        }
     }
     
-    console.log('✅ Abil: Captura ativada');
+    // Método 1: MutationObserver (detecta mudanças no DOM)
+    var observer = new MutationObserver(function() {
+        verificarMudancaUrl();
+    });
+    
+    observer.observe(document.body, {
+        childList: true,
+        subtree: true
+    });
+    
+    // Método 2: Verificação periódica (fallback)
+    setInterval(verificarMudancaUrl, 1000);
+    
+    // Método 3: Escutar eventos do navegador
+    window.addEventListener('popstate', function() {
+        console.log('🔄 Abil: Evento popstate detectado');
+        setTimeout(monitorarFormulario, 1000);
+    });
+    
+    // Execução inicial
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(monitorarFormulario, 2000);
+        });
+    } else {
+        setTimeout(monitorarFormulario, 2000);
+    }
+    
+    console.log('✅ Abil: Captura ativada (SPA mode)');
     
 })();
