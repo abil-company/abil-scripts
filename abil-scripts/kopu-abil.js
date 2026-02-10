@@ -1,17 +1,64 @@
 /**
  * Script de Captura de Orçamentos - Kopu Brindes
  * Desenvolvido por: Abil Company
- * Versão: 1.3 - SPA COMPATIBLE
+ * Versão: 1.4 - COM UTMs
  */
 
 (function() {
     'use strict';
     
-    console.log('🔵 Abil: Script iniciado (v1.3 SPA)');
+    console.log('🔵 Abil: Script iniciado (v1.4 com UTMs)');
     
     const ABIL_WEBHOOK_URL = 'https://webhook.abilcrm.com/webhook/kopu-orcamento';
     
     console.log('🔵 Abil: Webhook configurado:', ABIL_WEBHOOK_URL);
+    
+    // ════════════════════════════════════════════════════════════
+    // CAPTURA E PERSISTÊNCIA DE UTMs
+    // ════════════════════════════════════════════════════════════
+    
+    function capturarUTMs() {
+        var urlParams = new URLSearchParams(window.location.search);
+        var utms = {
+            utm_source: urlParams.get('utm_source') || '',
+            utm_medium: urlParams.get('utm_medium') || '',
+            utm_campaign: urlParams.get('utm_campaign') || '',
+            utm_term: urlParams.get('utm_term') || '',
+            utm_content: urlParams.get('utm_content') || ''
+        };
+        
+        // Se encontrou UTMs na URL atual, salva
+        var temUTMs = Object.values(utms).some(function(val) { return val !== ''; });
+        
+        if (temUTMs) {
+            console.log('📍 Abil: UTMs capturadas da URL:', utms);
+            sessionStorage.setItem('abil_utms', JSON.stringify(utms));
+            return utms;
+        }
+        
+        // Se não tem UTMs na URL, tenta recuperar do sessionStorage
+        var utmsSalvas = sessionStorage.getItem('abil_utms');
+        if (utmsSalvas) {
+            try {
+                var utmsParsed = JSON.parse(utmsSalvas);
+                console.log('📍 Abil: UTMs recuperadas do storage:', utmsParsed);
+                return utmsParsed;
+            } catch(e) {
+                console.log('📍 Abil: Nenhuma UTM encontrada');
+                return utms;
+            }
+        }
+        
+        console.log('📍 Abil: Nenhuma UTM encontrada');
+        return utms;
+    }
+    
+    // Captura UTMs assim que o script carrega
+    var utmsCapturadas = capturarUTMs();
+    
+    // ════════════════════════════════════════════════════════════
+    // CAPTURA DE DADOS DO FORMULÁRIO
+    // ════════════════════════════════════════════════════════════
     
     function capturarProdutos() {
         const produtos = [];
@@ -60,6 +107,10 @@
         return dados;
     }
     
+    // ════════════════════════════════════════════════════════════
+    // PROCESSAMENTO E ENVIO
+    // ════════════════════════════════════════════════════════════
+    
     function processarOrcamento() {
         console.log('🚀 Abil: Processando orçamento...');
         
@@ -80,21 +131,37 @@
             return soma + parseInt(produto.quantidade || 0);
         }, 0);
         
+        // Recaptura UTMs no momento do envio (caso tenha mudado)
+        var utmsAtuais = capturarUTMs();
+        
         const payload = {
             timestamp: new Date().toISOString(),
             data_hora_brasil: new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
+            
+            // Dados do cliente
             tipo_pessoa: dadosCliente.tipo_pessoa,
             nome_fantasia: dadosCliente.nome_fantasia,
             cnpj_cpf: dadosCliente.cnpj_cpf,
             nome_contato: dadosCliente.nome_contato,
             telefone: dadosCliente.telefone,
             email: dadosCliente.email,
+            
+            // Produtos
             produtos: produtos,
             total_produtos: produtos.length,
             total_unidades: totalUnidades,
+            
+            // Rastreamento
             url_pagina: window.location.href,
             url_origem: document.referrer || 'Acesso direto',
-            fonte: 'Website Kopu - Carrinho'
+            fonte: 'Website Kopu - Carrinho',
+            
+            // UTMs de Marketing
+            utm_source: utmsAtuais.utm_source,
+            utm_medium: utmsAtuais.utm_medium,
+            utm_campaign: utmsAtuais.utm_campaign,
+            utm_term: utmsAtuais.utm_term,
+            utm_content: utmsAtuais.utm_content
         };
         
         console.log('📤 Abil: Enviando payload:', payload);
@@ -122,17 +189,19 @@
         });
     }
     
+    // ════════════════════════════════════════════════════════════
+    // MONITORAMENTO DO BOTÃO (SPA COMPATIBLE)
+    // ════════════════════════════════════════════════════════════
+    
     var botoesConfigurados = new Set();
     
     function tentarConfigurarBotao() {
-        // Procura o botão com texto "Finalizar orçamento"
         var botoes = document.querySelectorAll('button');
         var botaoEncontrado = false;
         
         botoes.forEach(function(botao) {
             var texto = botao.textContent.trim();
             
-            // Se o botão tem o texto correto e ainda não foi configurado
             if (texto === 'Finalizar orçamento' && !botoesConfigurados.has(botao)) {
                 console.log('✅ Abil: Botão "Finalizar orçamento" encontrado!');
                 console.log('✅ Abil: Listener adicionado ao botão');
@@ -153,7 +222,6 @@
     function monitorarFormulario() {
         console.log('👀 Abil: Iniciando monitoramento (URL: ' + window.location.pathname + ')');
         
-        // Verifica se está na página do carrinho
         if (!window.location.pathname.includes('carrinho')) {
             console.log('ℹ️ Abil: Não está na página do carrinho, aguardando...');
             return;
@@ -161,19 +229,16 @@
         
         console.log('✅ Abil: Está na página do carrinho, procurando botão...');
         
-        // Tenta configurar imediatamente
         if (tentarConfigurarBotao()) {
             return;
         }
         
-        // Se não encontrou, fica tentando
         var tentativas = 0;
-        var maxTentativas = 60; // 60 x 500ms = 30 segundos
+        var maxTentativas = 60;
         
         var intervalo = setInterval(function() {
             tentativas++;
             
-            // Verifica se ainda está na página do carrinho
             if (!window.location.pathname.includes('carrinho')) {
                 console.log('ℹ️ Abil: Saiu da página do carrinho, parando busca');
                 clearInterval(intervalo);
@@ -187,14 +252,16 @@
                 clearInterval(intervalo);
             }
             
-            // Log a cada 10 tentativas
             if (tentativas % 10 === 0) {
                 console.log('⏳ Abil: Ainda procurando... (' + tentativas + ' tentativas)');
             }
         }, 500);
     }
     
-    // Monitorar mudanças de URL (para SPAs)
+    // ════════════════════════════════════════════════════════════
+    // MONITORAMENTO DE URL (SPA)
+    // ════════════════════════════════════════════════════════════
+    
     var ultimaUrl = window.location.href;
     
     function verificarMudancaUrl() {
@@ -204,12 +271,13 @@
             console.log('🔄 Abil: Mudança de URL detectada:', urlAtual);
             ultimaUrl = urlAtual;
             
-            // Aguarda um pouco para a página renderizar
+            // Recaptura UTMs se houver na nova URL
+            capturarUTMs();
+            
             setTimeout(monitorarFormulario, 1000);
         }
     }
     
-    // Método 1: MutationObserver (detecta mudanças no DOM)
     var observer = new MutationObserver(function() {
         verificarMudancaUrl();
     });
@@ -219,10 +287,8 @@
         subtree: true
     });
     
-    // Método 2: Verificação periódica (fallback)
     setInterval(verificarMudancaUrl, 1000);
     
-    // Método 3: Escutar eventos do navegador
     window.addEventListener('popstate', function() {
         console.log('🔄 Abil: Evento popstate detectado');
         setTimeout(monitorarFormulario, 1000);
@@ -237,6 +303,6 @@
         setTimeout(monitorarFormulario, 2000);
     }
     
-    console.log('✅ Abil: Captura ativada (SPA mode)');
+    console.log('✅ Abil: Captura ativada (SPA mode + UTMs)');
     
 })();
