@@ -1,60 +1,72 @@
 /**
  * Script de Captura de Orçamentos - Kopu Brindes
  * Desenvolvido por: Abil Company
- * Versão: 1.4 - COM UTMs
+ * Versão: 1.5 - COM UTMs + GCLID + FBCLID
  */
 
 (function() {
     'use strict';
     
-    console.log('🔵 Abil: Script iniciado (v1.4 com UTMs)');
+    console.log('🔵 Abil: Script iniciado (v1.5 com UTMs + IDs de Clique)');
     
     const ABIL_WEBHOOK_URL = 'https://webhook.abilcrm.com/webhook/kopu-orcamento';
     
     console.log('🔵 Abil: Webhook configurado:', ABIL_WEBHOOK_URL);
     
     // ════════════════════════════════════════════════════════════
-    // CAPTURA E PERSISTÊNCIA DE UTMs
+    // CAPTURA E PERSISTÊNCIA DE PARÂMETROS DE MARKETING
     // ════════════════════════════════════════════════════════════
     
-    function capturarUTMs() {
+    function capturarParametrosMarketing() {
         var urlParams = new URLSearchParams(window.location.search);
-        var utms = {
+        
+        var parametros = {
+            // UTMs padrão
             utm_source: urlParams.get('utm_source') || '',
             utm_medium: urlParams.get('utm_medium') || '',
             utm_campaign: urlParams.get('utm_campaign') || '',
             utm_term: urlParams.get('utm_term') || '',
-            utm_content: urlParams.get('utm_content') || ''
+            utm_content: urlParams.get('utm_content') || '',
+            
+            // IDs de clique
+            gclid: urlParams.get('gclid') || '', // Google Click ID
+            fbclid: urlParams.get('fbclid') || '', // Facebook Click ID
+            
+            // Outros parâmetros úteis (opcionais)
+            msclkid: urlParams.get('msclkid') || '', // Microsoft/Bing Click ID
+            ttclid: urlParams.get('ttclid') || '' // TikTok Click ID
         };
         
-        // Se encontrou UTMs na URL atual, salva
-        var temUTMs = Object.values(utms).some(function(val) { return val !== ''; });
+        // Verifica se encontrou algum parâmetro
+        var temParametros = Object.values(parametros).some(function(val) { 
+            return val !== ''; 
+        });
         
-        if (temUTMs) {
-            console.log('📍 Abil: UTMs capturadas da URL:', utms);
-            sessionStorage.setItem('abil_utms', JSON.stringify(utms));
-            return utms;
+        if (temParametros) {
+            console.log('📍 Abil: Parâmetros de marketing capturados:', parametros);
+            sessionStorage.setItem('abil_marketing_params', JSON.stringify(parametros));
+            return parametros;
         }
         
-        // Se não tem UTMs na URL, tenta recuperar do sessionStorage
-        var utmsSalvas = sessionStorage.getItem('abil_utms');
-        if (utmsSalvas) {
+        // Se não tem parâmetros na URL, tenta recuperar do sessionStorage
+        var parametrosSalvos = sessionStorage.getItem('abil_marketing_params');
+        if (parametrosSalvos) {
             try {
-                var utmsParsed = JSON.parse(utmsSalvas);
-                console.log('📍 Abil: UTMs recuperadas do storage:', utmsParsed);
-                return utmsParsed;
+                var parametrosParsed = JSON.parse(parametrosSalvos);
+                console.log('📍 Abil: Parâmetros recuperados do storage:', parametrosParsed);
+                return parametrosParsed;
             } catch(e) {
-                console.log('📍 Abil: Nenhuma UTM encontrada');
-                return utms;
+                console.log('📍 Abil: Nenhum parâmetro de marketing encontrado');
+                return parametros;
             }
         }
         
-        console.log('📍 Abil: Nenhuma UTM encontrada');
-        return utms;
+        console.log('📍 Abil: Nenhum parâmetro de marketing encontrado');
+        return parametros;
     }
     
-    // Captura UTMs assim que o script carrega
-    var utmsCapturadas = capturarUTMs();
+    // Captura parâmetros assim que o script carrega
+    var parametrosCapturados = capturarParametrosMarketing();
     
     // ════════════════════════════════════════════════════════════
     // CAPTURA DE DADOS DO FORMULÁRIO
@@ -131,8 +143,8 @@
             return soma + parseInt(produto.quantidade || 0);
         }, 0);
         
-        // Recaptura UTMs no momento do envio (caso tenha mudado)
-        var utmsAtuais = capturarUTMs();
+        // Recaptura parâmetros no momento do envio (caso tenha mudado)
+        var parametrosAtuais = capturarParametrosMarketing();
         
         const payload = {
             timestamp: new Date().toISOString(),
@@ -156,12 +168,18 @@
             url_origem: document.referrer || 'Acesso direto',
             fonte: 'Website Kopu - Carrinho',
             
-            // UTMs de Marketing
-            utm_source: utmsAtuais.utm_source,
-            utm_medium: utmsAtuais.utm_medium,
-            utm_campaign: utmsAtuais.utm_campaign,
-            utm_term: utmsAtuais.utm_term,
-            utm_content: utmsAtuais.utm_content
+            // Parâmetros de Marketing
+            utm_source: parametrosAtuais.utm_source,
+            utm_medium: parametrosAtuais.utm_medium,
+            utm_campaign: parametrosAtuais.utm_campaign,
+            utm_term: parametrosAtuais.utm_term,
+            utm_content: parametrosAtuais.utm_content,
+            
+            // IDs de Clique (para conversões)
+            gclid: parametrosAtuais.gclid,
+            fbclid: parametrosAtuais.fbclid,
+            msclkid: parametrosAtuais.msclkid,
+            ttclid: parametrosAtuais.ttclid
         };
         
         console.log('📤 Abil: Enviando payload:', payload);
@@ -271,8 +289,8 @@
             console.log('🔄 Abil: Mudança de URL detectada:', urlAtual);
             ultimaUrl = urlAtual;
             
-            // Recaptura UTMs se houver na nova URL
-            capturarUTMs();
+            // Recaptura parâmetros se houver na nova URL
+            capturarParametrosMarketing();
             
             setTimeout(monitorarFormulario, 1000);
         }
@@ -303,6 +321,6 @@
         setTimeout(monitorarFormulario, 2000);
     }
     
-    console.log('✅ Abil: Captura ativada (SPA mode + UTMs)');
+    console.log('✅ Abil: Captura ativada (SPA mode + UTMs + Click IDs)');
     
 })();
