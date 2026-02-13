@@ -1,31 +1,34 @@
 /**
  * Script de Captura de Cadastro - Kopu Brindes
  * Desenvolvido por: Abil Company
- * Versão: 1.0
+ * Versão: 1.1 - SPA COMPATIBLE
  */
 
 (function() {
     'use strict';
     
-    console.log('🔵 Abil: Script de Cadastro iniciado');
+    console.log('🔵 Abil Cadastro: Script iniciado (v1.1 SPA)');
     
-    const ABIL_WEBHOOK_URL = 'https://webhook.abilcrm.com/webhook/kopu-cadastro'; // URL DIFERENTE!
+    const ABIL_WEBHOOK_URL = 'https://webhook.abilcrm.com/webhook/kopu-cadastro';
     
-    console.log('🔵 Abil: Webhook de cadastro configurado');
+    console.log('🔵 Abil Cadastro: Webhook configurado:', ABIL_WEBHOOK_URL);
     
     // ════════════════════════════════════════════════════════════
-    // CAPTURA DE PARÂMETROS DE MARKETING
+    // CAPTURA E PERSISTÊNCIA DE PARÂMETROS DE MARKETING
     // ════════════════════════════════════════════════════════════
     
     function capturarParametrosMarketing() {
         var urlParams = new URLSearchParams(window.location.search);
         
         var parametros = {
+            // UTMs padrão
             utm_source: urlParams.get('utm_source') || '',
             utm_medium: urlParams.get('utm_medium') || '',
             utm_campaign: urlParams.get('utm_campaign') || '',
             utm_term: urlParams.get('utm_term') || '',
             utm_content: urlParams.get('utm_content') || '',
+            
+            // IDs de clique
             gclid: urlParams.get('gclid') || '',
             fbclid: urlParams.get('fbclid') || '',
             msclkid: urlParams.get('msclkid') || '',
@@ -37,7 +40,7 @@
         });
         
         if (temParametros) {
-            console.log('📍 Abil: Parâmetros capturados:', parametros);
+            console.log('📍 Abil Cadastro: Parâmetros de marketing capturados:', parametros);
             sessionStorage.setItem('abil_cadastro_params', JSON.stringify(parametros));
             return parametros;
         }
@@ -46,36 +49,40 @@
         if (parametrosSalvos) {
             try {
                 var parametrosParsed = JSON.parse(parametrosSalvos);
-                console.log('📍 Abil: Parâmetros recuperados:', parametrosParsed);
+                console.log('📍 Abil Cadastro: Parâmetros recuperados do storage:', parametrosParsed);
                 return parametrosParsed;
             } catch(e) {
+                console.log('📍 Abil Cadastro: Nenhum parâmetro de marketing encontrado');
                 return parametros;
             }
         }
         
+        console.log('📍 Abil Cadastro: Nenhum parâmetro de marketing encontrado');
         return parametros;
     }
     
     var parametrosCapturados = capturarParametrosMarketing();
     
     // ════════════════════════════════════════════════════════════
-    // CAPTURA DE DADOS DO FORMULÁRIO DE CADASTRO
+    // CAPTURA DE DADOS DO FORMULÁRIO
     // ════════════════════════════════════════════════════════════
     
     function capturarDadosCadastro() {
         // Tipo de pessoa (radio buttons)
         var tipoPessoa = '';
-        var radioJuridica = document.querySelector('input[type="radio"][value="juridica"]:checked, input[type="radio"]:checked');
-        var radioFisica = document.querySelector('input[type="radio"][value="fisica"]:checked');
+        var radios = document.querySelectorAll('input[type="radio"]');
         
-        if (radioJuridica && radioJuridica.parentElement.textContent.includes('jurídica')) {
-            tipoPessoa = 'juridica';
-        } else if (radioFisica || (radioJuridica && radioJuridica.parentElement.textContent.includes('física'))) {
-            tipoPessoa = 'fisica';
-        }
+        radios.forEach(function(radio) {
+            if (radio.checked) {
+                var label = radio.parentElement.textContent.toLowerCase();
+                if (label.includes('jurídica')) {
+                    tipoPessoa = 'juridica';
+                } else if (label.includes('física')) {
+                    tipoPessoa = 'fisica';
+                }
+            }
+        });
         
-        // Campos do formulário
-        var inputs = document.querySelectorAll('input[type="text"], input[type="tel"], input[type="email"]');
         var dados = {
             tipo_pessoa: tipoPessoa,
             nome_fantasia: '',
@@ -85,14 +92,22 @@
             email: ''
         };
         
+        // Captura todos os inputs
+        var inputs = document.querySelectorAll('input[type="text"], input[type="tel"], input[type="email"], input:not([type])');
+        
         inputs.forEach(function(input) {
-            var label = input.previousElementSibling ? input.previousElementSibling.textContent.toLowerCase() : '';
-            var placeholder = (input.placeholder || '').toLowerCase();
             var valor = input.value.trim();
-            
             if (!valor) return;
             
-            // Nome fantasia / Razão Social
+            // Tenta identificar pelo label anterior
+            var label = '';
+            if (input.previousElementSibling && input.previousElementSibling.textContent) {
+                label = input.previousElementSibling.textContent.toLowerCase();
+            }
+            
+            var placeholder = (input.placeholder || '').toLowerCase();
+            
+            // Nome fantasia
             if (label.includes('nome fantasia') || placeholder.includes('nome fantasia')) {
                 dados.nome_fantasia = valor;
             }
@@ -114,7 +129,7 @@
             }
         });
         
-        console.log('👤 Abil: Dados de cadastro capturados:', dados);
+        console.log('👤 Abil Cadastro: Dados capturados:', dados);
         
         return dados;
     }
@@ -124,13 +139,12 @@
     // ════════════════════════════════════════════════════════════
     
     function processarCadastro() {
-        console.log('🚀 Abil: Processando cadastro...');
+        console.log('🚀 Abil Cadastro: Processando cadastro...');
         
         var dadosCadastro = capturarDadosCadastro();
         
-        // Validação mínima
         if (!dadosCadastro.email) {
-            console.warn('⚠️ Abil: Email obrigatório!');
+            console.warn('⚠️ Abil Cadastro: Email obrigatório!');
             return;
         }
         
@@ -159,13 +173,15 @@
             utm_campaign: parametrosAtuais.utm_campaign,
             utm_term: parametrosAtuais.utm_term,
             utm_content: parametrosAtuais.utm_content,
+            
+            // IDs de Clique
             gclid: parametrosAtuais.gclid,
             fbclid: parametrosAtuais.fbclid,
             msclkid: parametrosAtuais.msclkid,
             ttclid: parametrosAtuais.ttclid
         };
         
-        console.log('📤 Abil: Enviando cadastro:', payload);
+        console.log('📤 Abil Cadastro: Enviando payload:', payload);
         
         fetch(ABIL_WEBHOOK_URL, {
             method: 'POST',
@@ -173,81 +189,129 @@
             body: JSON.stringify(payload)
         })
         .then(function(response) {
-            console.log('📡 Abil: Resposta - Status:', response.status);
+            console.log('📡 Abil Cadastro: Resposta recebida - Status:', response.status);
             if (response.ok) {
-                console.log('✅ Abil: Cadastro enviado com sucesso!');
+                console.log('✅ Abil Cadastro: Cadastro enviado com sucesso!');
                 return response.json();
             } else {
+                console.error('❌ Abil Cadastro: Erro na resposta do webhook');
                 throw new Error('Webhook retornou erro: ' + response.status);
             }
         })
         .then(function(data) {
-            console.log('✅ Abil: Confirmação:', data);
+            console.log('✅ Abil Cadastro: Confirmação do webhook:', data);
         })
         .catch(function(erro) {
-            console.error('❌ Abil: Erro ao enviar:', erro);
+            console.error('❌ Abil Cadastro: Erro ao enviar cadastro:', erro);
         });
     }
     
     // ════════════════════════════════════════════════════════════
-    // MONITORAMENTO DO BOTÃO
+    // MONITORAMENTO DO BOTÃO (SPA COMPATIBLE)
     // ════════════════════════════════════════════════════════════
     
-    var botaoConfigurado = false;
+    var botoesConfigurados = new Set();
     
     function tentarConfigurarBotao() {
-        if (botaoConfigurado) return true;
-        
         var botoes = document.querySelectorAll('button');
+        var botaoEncontrado = false;
         
-        for (var i = 0; i < botoes.length; i++) {
-            var botao = botoes[i];
+        botoes.forEach(function(botao) {
             var texto = botao.textContent.trim();
             
-            if (texto === 'Cadastrar') {
-                console.log('✅ Abil: Botão "Cadastrar" encontrado!');
+            if (texto === 'Cadastrar' && !botoesConfigurados.has(botao)) {
+                console.log('✅ Abil Cadastro: Botão "Cadastrar" encontrado!');
+                console.log('✅ Abil Cadastro: Listener adicionado ao botão');
                 
                 botao.addEventListener('click', function() {
-                    console.log('🎯 Abil: Botão clicado! Aguardando 500ms...');
+                    console.log('🎯 Abil Cadastro: Botão clicado! Aguardando 500ms...');
                     setTimeout(processarCadastro, 500);
                 });
                 
-                botaoConfigurado = true;
-                return true;
+                botoesConfigurados.add(botao);
+                botaoEncontrado = true;
             }
-        }
+        });
         
-        return false;
+        return botaoEncontrado;
     }
     
     function monitorarFormulario() {
-        console.log('👀 Abil: Monitorando formulário de cadastro...');
+        console.log('👀 Abil Cadastro: Iniciando monitoramento (URL: ' + window.location.pathname + ')');
         
         if (!window.location.pathname.includes('cadastro')) {
-            console.log('ℹ️ Abil: Não está na página de cadastro');
+            console.log('ℹ️ Abil Cadastro: Não está na página de cadastro, aguardando...');
             return;
         }
         
-        console.log('✅ Abil: Está na página de cadastro');
+        console.log('✅ Abil Cadastro: Está na página de cadastro, procurando botão...');
         
-        if (tentarConfigurarBotao()) return;
+        if (tentarConfigurarBotao()) {
+            return;
+        }
         
         var tentativas = 0;
-        var maxTentativas = 40;
+        var maxTentativas = 60;
         
         var intervalo = setInterval(function() {
             tentativas++;
             
+            if (!window.location.pathname.includes('cadastro')) {
+                console.log('ℹ️ Abil Cadastro: Saiu da página de cadastro, parando busca');
+                clearInterval(intervalo);
+                return;
+            }
+            
             if (tentarConfigurarBotao()) {
                 clearInterval(intervalo);
             } else if (tentativas >= maxTentativas) {
-                console.error('❌ Abil: Botão "Cadastrar" não encontrado');
+                console.error('❌ Abil Cadastro: Botão não encontrado após ' + (maxTentativas * 0.5) + ' segundos');
                 clearInterval(intervalo);
+            }
+            
+            if (tentativas % 10 === 0) {
+                console.log('⏳ Abil Cadastro: Ainda procurando... (' + tentativas + ' tentativas)');
             }
         }, 500);
     }
     
-    // Execução
+    // ════════════════════════════════════════════════════════════
+    // MONITORAMENTO DE URL (SPA)
+    // ════════════════════════════════════════════════════════════
+    
+    var ultimaUrl = window.location.href;
+    
+    function verificarMudancaUrl() {
+        var urlAtual = window.location.href;
+        
+        if (urlAtual !== ultimaUrl) {
+            console.log('🔄 Abil Cadastro: Mudança de URL detectada:', urlAtual);
+            ultimaUrl = urlAtual;
+            
+            // Recaptura parâmetros se houver na nova URL
+            capturarParametrosMarketing();
+            
+            setTimeout(monitorarFormulario, 1000);
+        }
+    }
+    
+    var observer = new MutationObserver(function() {
+        verificarMudancaUrl();
+    });
+    
+    observer.observe(document.body, {
+        childList: true,
+        subtree: true
+    });
+    
+    setInterval(verificarMudancaUrl, 1000);
+    
+    window.addEventListener('popstate', function() {
+        console.log('🔄 Abil Cadastro: Evento popstate detectado');
+        setTimeout(monitorarFormulario, 1000);
+    });
+    
+    // Execução inicial
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', function() {
             setTimeout(monitorarFormulario, 2000);
@@ -256,6 +320,6 @@
         setTimeout(monitorarFormulario, 2000);
     }
     
-    console.log('✅ Abil: Captura de cadastro ativada');
+    console.log('✅ Abil Cadastro: Captura ativada (SPA mode + UTMs + Click IDs)');
     
 })();
