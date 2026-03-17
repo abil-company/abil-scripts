@@ -1,13 +1,13 @@
 /**
  * Script de Captura de Cadastro - Kopu Brindes
  * Desenvolvido por: Abil Company
- * Versão: 1.1 - SPA COMPATIBLE
+ * Versão: 1.2 - SPA COMPATIBLE + FIX sessionStorage
  */
 
 (function() {
     'use strict';
     
-    console.log('🔵 Abil Cadastro: Script iniciado (v1.1 SPA)');
+    console.log('🔵 Abil Cadastro: Script iniciado (v1.2 SPA)');
     
     const ABIL_WEBHOOK_URL = 'https://webhook.abilcrm.com/webhook/kopu-cadastro';
     
@@ -41,11 +41,11 @@
         
         if (temParametros) {
             console.log('📍 Abil Cadastro: Parâmetros de marketing capturados:', parametros);
-            sessionStorage.setItem('abil_cadastro_params', JSON.stringify(parametros));
+            sessionStorage.setItem('abil_marketing_params', JSON.stringify(parametros));
             return parametros;
         }
         
-        var parametrosSalvos = sessionStorage.getItem('abil_cadastro_params');
+        var parametrosSalvos = sessionStorage.getItem('abil_marketing_params');
         if (parametrosSalvos) {
             try {
                 var parametrosParsed = JSON.parse(parametrosSalvos);
