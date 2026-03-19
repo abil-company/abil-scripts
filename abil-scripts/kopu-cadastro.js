@@ -2,32 +2,37 @@
  * kopu-capture.js
  * Captura unificada de leads — Kopu Brindes
  * Desenvolvido por: Abil Company
- * Versão: 3.0
+ * Versão: 4.0
  *
  * Origens monitoradas:
- *   • chat_ao_vivo  → Widget 1 GHL liveChat  (Shadow DOM duplo: chat-widget → chat-form → campos)
- *   • whatsapp_chat → Widget 2 GHL waChat    (Shadow DOM simples: chat-widget → campos)
- *   • cadastro      → Formulário /cadastro   (SPA compatible)
+ *   • chat_ao_vivo  → chat-widget com style left  (MutationObserver)
+ *   • whatsapp_chat → chat-widget com style right (MutationObserver)
+ *   • cadastro      → Formulário /cadastro        (SPA compatible)
  *
- * Extras:
- *   • Injeta UTMs via registerBeforeSubmit → dados chegam no GHL automaticamente
- *   • Atualiza links estáticos de WhatsApp com UTMs no texto da mensagem
+ * Estratégia dos widgets GHL:
+ *   O <form> só é injetado no Shadow DOM quando o usuário ABRE o widget.
+ *   Por isso usamos MutationObserver no shadowRoot de cada widget,
+ *   esperando o form aparecer — sem polling com timeout.
+ *
+ *   Identificação do widget: pelo style do #lc_text-widget
+ *     left:  20px → chat_ao_vivo
+ *     right: 20px → whatsapp_chat
  */
 
 (function () {
     'use strict';
 
-    console.log('🔵 Abil Kopu: Script iniciado (v3.0)');
+    console.log('🔵 Abil Kopu: Script iniciado (v4.0)');
 
     // ════════════════════════════════════════════════════════════
     // CONFIG
     // ════════════════════════════════════════════════════════════
 
     var CONFIG = {
-        webhookUrl:   'https://webhook.abilcrm.com/webhook/kopu-cadastro',
-        pollInterval: 300,   // ms entre tentativas
-        pollTimeout:  25000, // ms máximo esperando widgets (25s)
-        debug:        false
+        webhookUrl:        'https://webhook.abilcrm.com/webhook/kopu-cadastro',
+        widgetPollInterval: 300,   // ms aguardando os elementos chat-widget aparecerem
+        widgetPollTimeout:  20000, // ms máximo (os elementos, não o form)
+        debug:              false
     };
 
     var log = function () {
@@ -72,11 +77,10 @@
         return params;
     }
 
-    // Captura imediata ao carregar a página
     capturarParametrosMarketing();
 
     // ════════════════════════════════════════════════════════════
-    // ENVIO PARA WEBHOOK PRÓPRIO (n8n)
+    // ENVIO PARA WEBHOOK
     // ════════════════════════════════════════════════════════════
 
     function enviarWebhook(source, dadosExtras) {
@@ -112,7 +116,7 @@
         })
         .then(function (r) {
             console.log(r.ok
-                ? '✅ Abil Kopu [' + source + ']: Enviado (HTTP ' + r.status + ')'
+                ? '✅ Abil Kopu [' + source + ']: Enviado com sucesso (HTTP ' + r.status + ')'
                 : '❌ Abil Kopu [' + source + ']: Erro HTTP ' + r.status
             );
         })
@@ -123,8 +127,6 @@
 
     // ════════════════════════════════════════════════════════════
     // INJEÇÃO DE UTMs NO GHL VIA registerBeforeSubmit
-    // Injeta nos dados do contato ANTES do envio ao GHL,
-    // garantindo que as UTMs cheguem nos campos customizados.
     // ════════════════════════════════════════════════════════════
 
     function registrarBeforeSubmitGHL() {
@@ -132,9 +134,7 @@
             !window.leadConnector ||
             !window.leadConnector.chatWidget ||
             typeof window.leadConnector.chatWidget.registerBeforeSubmit !== 'function'
-        ) {
-            return false;
-        }
+        ) return false;
 
         window.leadConnector.chatWidget.registerBeforeSubmit(function (contactData) {
             var mkt = capturarParametrosMarketing();
@@ -142,7 +142,7 @@
                 if (mkt[key]) contactData[key] = mkt[key];
             });
             log('registerBeforeSubmit: UTMs injetadas:', mkt);
-            return true; // true = permite o envio
+            return true;
         });
 
         console.log('✅ Abil Kopu: registerBeforeSubmit registrado.');
@@ -150,103 +150,127 @@
     }
 
     function pollingBeforeSubmit() {
-        var deadline = Date.now() + CONFIG.pollTimeout;
+        var deadline = Date.now() + 20000;
         var iv = setInterval(function () {
             if (registrarBeforeSubmitGHL()) { clearInterval(iv); return; }
-            if (Date.now() > deadline)      { clearInterval(iv); log('leadConnector API não encontrada.'); }
-        }, CONFIG.pollInterval);
+            if (Date.now() > deadline)      { clearInterval(iv); }
+        }, CONFIG.widgetPollInterval);
     }
 
     // ════════════════════════════════════════════════════════════
-    // WIDGET 1 — CHAT AO VIVO (liveChat)
-    // Shadow DOM duplo: chat-widget[0] → chat-form → shadow → form
-    // source = 'chat_ao_vivo'
+    // WIDGETS GHL — DETECÇÃO POR MUTATIONOBSERVER
+    //
+    // Identificação da origem pelo style do #lc_text-widget:
+    //   left  → chat_ao_vivo
+    //   right → whatsapp_chat
+    //
+    // O <form> só existe no Shadow DOM após o usuário clicar
+    // para abrir o widget. O Observer fica escutando e anexa
+    // o listener de submit no momento em que o form aparece.
     // ════════════════════════════════════════════════════════════
 
-    function anexarListenerChatAoVivo() {
-        var widgets = document.querySelectorAll('chat-widget');
-        var w1 = widgets[0];
-        if (!w1 || !w1.shadowRoot) return false;
+    function resolverFormNoShadow(sr) {
+        // Tenta form direto no shadowRoot (shadow DOM simples)
+        var form = sr.querySelector('form');
+        if (form) return form;
 
-        var chatForm = w1.shadowRoot.querySelector('chat-form');
-        if (!chatForm || !chatForm.shadowRoot) return false;
+        // Tenta via chat-form (shadow DOM duplo)
+        var chatForm = sr.querySelector('chat-form');
+        if (chatForm && chatForm.shadowRoot) {
+            return chatForm.shadowRoot.querySelector('form');
+        }
 
-        var form = chatForm.shadowRoot.querySelector('form');
-        if (!form) return false;
-        if (form._abilAttached) return true;
+        return null;
+    }
 
-        form._abilAttached = true;
-        console.log('✅ Abil Kopu [chat_ao_vivo]: Shadow DOM duplo encontrado, listener anexado.');
+    function resolverCamposDoForm(sr) {
+        // Campo pode estar no shadowRoot direto ou dentro de chat-form
+        var root = sr;
+        var chatForm = sr.querySelector('chat-form');
+        if (chatForm && chatForm.shadowRoot) {
+            root = chatForm.shadowRoot;
+        }
+        return {
+            nome:     (root.querySelector('#msgsndr_1') || {}).value || '',
+            telefone: (root.querySelector('#msgsndr_2') || {}).value || '',
+            mensagem: (root.querySelector('#msgsndr_4') || {}).value || ''
+        };
+    }
 
-        form.addEventListener('submit', function () {
-            var sr = chatForm.shadowRoot;
-            enviarWebhook('chat_ao_vivo', {
-                nome:     (sr.querySelector('#msgsndr_1') || {}).value || '',
-                telefone: (sr.querySelector('#msgsndr_2') || {}).value || ''
+    function observarWidget(w, source) {
+        var sr = w.shadowRoot;
+        if (!sr) return;
+
+        var observer = new MutationObserver(function () {
+            var form = resolverFormNoShadow(sr);
+            if (!form || form._abilAttached) return;
+
+            form._abilAttached = true;
+            observer.disconnect();
+            console.log('✅ Abil Kopu [' + source + ']: Form detectado, listener anexado.');
+
+            form.addEventListener('submit', function () {
+                var campos = resolverCamposDoForm(sr);
+                enviarWebhook(source, {
+                    nome:     campos.nome,
+                    telefone: campos.telefone,
+                    mensagem: campos.mensagem
+                });
             });
         });
 
-        return true;
+        observer.observe(sr, { childList: true, subtree: true });
+        log('Observer ativo para:', source);
     }
 
-    // ════════════════════════════════════════════════════════════
-    // WIDGET 2 — WHATSAPP CHAT (waChat)
-    // Shadow DOM simples: chat-widget[1] → shadow → form
-    // source = 'whatsapp_chat'
-    // ════════════════════════════════════════════════════════════
-
-    function anexarListenerWhatsAppChat() {
-        var widgets = document.querySelectorAll('chat-widget');
-        var w2 = widgets[1];
-        if (!w2 || !w2.shadowRoot) return false;
-
-        var form = w2.shadowRoot.querySelector('form');
-        if (!form) return false;
-        if (form._abilAttached) return true;
-
-        form._abilAttached = true;
-        console.log('✅ Abil Kopu [whatsapp_chat]: Shadow DOM simples encontrado, listener anexado.');
-
-        form.addEventListener('submit', function () {
-            var sr = w2.shadowRoot;
-            enviarWebhook('whatsapp_chat', {
-                nome:     (sr.querySelector('#msgsndr_1') || {}).value || '',
-                telefone: (sr.querySelector('#msgsndr_2') || {}).value || '',
-                mensagem: (sr.querySelector('#msgsndr_4') || {}).value || ''
-            });
-        });
-
-        return true;
-    }
-
-    // Polling unificado para os dois widgets GHL
-    function pollingWidgetsGHL() {
-        var deadline = Date.now() + CONFIG.pollTimeout;
-        var w1Ok = false;
-        var w2Ok = false;
+    function identificarEObservarWidgets() {
+        var deadline = Date.now() + CONFIG.widgetPollTimeout;
 
         var iv = setInterval(function () {
-            if (!w1Ok) w1Ok = anexarListenerChatAoVivo();
-            if (!w2Ok) w2Ok = anexarListenerWhatsAppChat();
+            var widgets = document.querySelectorAll('chat-widget');
 
-            if (w1Ok && w2Ok) { clearInterval(iv); return; }
+            if (widgets.length >= 2) {
+                clearInterval(iv);
+
+                widgets.forEach(function (w) {
+                    var sr = w.shadowRoot;
+                    if (!sr) return;
+
+                    var div    = sr.querySelector('#lc_text-widget');
+                    var style  = (div && div.getAttribute('style')) || '';
+                    var source = style.includes('left:') ? 'chat_ao_vivo' : 'whatsapp_chat';
+
+                    console.log('✅ Abil Kopu: Widget identificado como [' + source + '], aguardando abertura...');
+                    observarWidget(w, source);
+                });
+
+                return;
+            }
+
+            // Se só um widget estiver presente, já observa o que tiver
+            if (widgets.length === 1 && !widgets[0]._abilObserved) {
+                widgets[0]._abilObserved = true;
+                var sr     = widgets[0].shadowRoot;
+                var div    = sr && sr.querySelector('#lc_text-widget');
+                var style  = (div && div.getAttribute('style')) || '';
+                var source = style.includes('left:') ? 'chat_ao_vivo' : 'whatsapp_chat';
+                console.log('✅ Abil Kopu: 1 widget encontrado [' + source + '], observando...');
+                observarWidget(widgets[0], source);
+            }
+
             if (Date.now() > deadline) {
                 clearInterval(iv);
-                if (!w1Ok) console.warn('⚠️ Abil Kopu [chat_ao_vivo]: Widget não encontrado no timeout.');
-                if (!w2Ok) console.warn('⚠️ Abil Kopu [whatsapp_chat]: Widget não encontrado no timeout.');
+                console.warn('⚠️ Abil Kopu: Nenhum chat-widget encontrado após timeout.');
             }
-        }, CONFIG.pollInterval);
+        }, CONFIG.widgetPollInterval);
     }
 
     // ════════════════════════════════════════════════════════════
     // LINKS ESTÁTICOS DE WHATSAPP
-    // Atualiza o parâmetro "text" dos links com rastreio de UTM
-    // IDs: link-whatsapp-top-sul, link-whatsapp-top-sp,
-    //      link-whatsapp-rodape-sul, link-whatsapp-rodape-sp
     // ════════════════════════════════════════════════════════════
 
     function atualizarLinksWhatsApp() {
-        var mkt = capturarParametrosMarketing();
+        var mkt    = capturarParametrosMarketing();
         var temUtm = Object.keys(mkt).some(function (k) { return mkt[k] !== ''; });
         if (!temUtm) return;
 
@@ -262,22 +286,18 @@
 
         links.forEach(function (link) {
             try {
-                var url = new URL(link.href);
+                var url      = new URL(link.href);
                 var textoBase = (url.searchParams.get('text') || '').replace(/\s*\[fonte:.*?\]$/, '').trim();
                 url.searchParams.set('text', textoBase + sufixo);
                 link.href = url.toString();
-                log('Link WA atualizado:', link.id);
-            } catch (e) {
-                log('Erro ao atualizar link', link.id, e);
-            }
+            } catch (e) { log('Erro ao atualizar link', link.id, e); }
         });
 
         console.log('✅ Abil Kopu: ' + links.length + ' link(s) de WhatsApp atualizados com UTMs.');
     }
 
     // ════════════════════════════════════════════════════════════
-    // CADASTRO (SPA compatible — lógica original preservada)
-    // source = 'cadastro'
+    // CADASTRO (SPA compatible)
     // ════════════════════════════════════════════════════════════
 
     function capturarDadosCadastro() {
@@ -381,11 +401,11 @@
     // ════════════════════════════════════════════════════════════
 
     function init() {
-        pollingBeforeSubmit();    // injeta UTMs direto no GHL (ambos os widgets)
-        pollingWidgetsGHL();      // dispara webhook próprio com source correto
-        monitorarCadastro();      // formulário /cadastro
-        atualizarLinksWhatsApp(); // 4 links estáticos de WhatsApp
-        console.log('✅ Abil Kopu: Captura ativada (chat_ao_vivo + whatsapp_chat + cadastro + links WA)');
+        pollingBeforeSubmit();           // injeta UTMs direto no GHL
+        identificarEObservarWidgets();   // observers nos dois widgets
+        monitorarCadastro();             // formulário /cadastro
+        atualizarLinksWhatsApp();        // links estáticos de WA
+        console.log('✅ Abil Kopu: Captura ativada (v4.0 — observer mode)');
     }
 
     if (document.readyState === 'loading') {
