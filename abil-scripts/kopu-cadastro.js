@@ -270,30 +270,9 @@
     // ════════════════════════════════════════════════════════════
 
     function atualizarLinksWhatsApp() {
-        var mkt    = capturarParametrosMarketing();
-        var temUtm = Object.keys(mkt).some(function (k) { return mkt[k] !== ''; });
-        if (!temUtm) return;
-
-        var links = document.querySelectorAll('a[id^="link-whatsapp"]');
-        if (!links.length) return;
-
-        var partes = [];
-        if (mkt.utm_source)   partes.push('fonte: '    + mkt.utm_source);
-        if (mkt.utm_medium)   partes.push('mídia: '    + mkt.utm_medium);
-        if (mkt.utm_campaign) partes.push('campanha: ' + mkt.utm_campaign);
-
-        var sufixo = partes.length ? ' [' + partes.join(' | ') + ']' : '';
-
-        links.forEach(function (link) {
-            try {
-                var url      = new URL(link.href);
-                var textoBase = (url.searchParams.get('text') || '').replace(/\s*\[fonte:.*?\]$/, '').trim();
-                url.searchParams.set('text', textoBase + sufixo);
-                link.href = url.toString();
-            } catch (e) { log('Erro ao atualizar link', link.id, e); }
-        });
-
-        console.log('✅ Abil Kopu: ' + links.length + ' link(s) de WhatsApp atualizados com UTMs.');
+        // Desativado: a tag [fonte: ... | mídia: ... | campanha: ...] duplicava
+        // com a referencia [KPU-XXXXXX] do sistema de tracking via Railway + GHL,
+        // que ja captura fonte/midia/campanha automaticamente por baixo dos panos.
     }
 
     // ════════════════════════════════════════════════════════════
